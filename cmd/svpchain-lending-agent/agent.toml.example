@@ -1,0 +1,36 @@
+# svpchain-lending-agent configuration.
+#
+# The lending binary shares the full agent's schema (internal/config);
+# families it does not register — perps trading, EVM DeFi building — are
+# simply ignored if configured. dex_chain.evm_rpc_url and
+# evm.lendora.comptroller_addr are REQUIRED here (the binary refuses to boot
+# without them). Use a DISTINCT operator key per binary: the agent id derives
+# from the key and self-registration hashes this binary's own card.
+
+listen_addr = ":8084"
+# How callers reach this agent; advertised in the Agent Card.
+public_url  = "http://localhost:8084"
+
+[dex_chain]
+id               = "svpchain-testnet-1"
+grpc_addr        = "127.0.0.1:9090"
+comet_rpc_url    = "http://127.0.0.1:26657"
+indexer_base_url = "http://127.0.0.1:3002"
+# Required for this binary: Lendora builds land as EVM txs.
+evm_rpc_url      = "http://127.0.0.1:8545"
+
+# Required for this binary: the Lendora (Compound V2 fork) Comptroller.
+[evm.lendora]
+comptroller_addr = "0x…"
+
+# Optional testnet faucet backend; unset, the faucet tools refuse.
+#faucet_base_url = "http://127.0.0.1:8088"
+
+# Operator key for delegated Lendora execution (supply/redeem/withdraw/
+# borrow/repay under SVP-DT credentials), on-chain self-registration, and
+# SVP-DT settlement. Optional: without it the execution skills refuse with a
+# reason. The SVPCHAIN_AGENT_OPERATOR_KEY env var takes precedence over key_file.
+#[operator]
+#key_file     = "operator.key"
+#capabilities = ["lendora.supply", "lendora.redeem", "lendora.withdraw", "lendora.borrow", "lendora.repay"]
+#metadata     = "svpchain Lendora lending agent"
