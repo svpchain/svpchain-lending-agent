@@ -23,8 +23,10 @@ var identity = a2aserver.CardIdentity{
 	Description: "Lending agent for the Lendora money market on SVP-Chain: market and " +
 		"account reads, risk assessment, unsigned supply/withdraw/borrow/repay/" +
 		"collateral tx building with an EVM landing rail, self-service auth, faucet, " +
-		"agent registry, delegations, and SVP-DT settlement and self-registration " +
-		"(delegated lending writes are future work; builds are caller-signed).",
+		"agent registry, delegations, SVP-DT settlement and self-registration, and " +
+		"delegated Lendora execution — supply, redeem, withdraw, borrow and repay " +
+		"under an SVP-DT credential, executed with the principal as the EVM sender " +
+		"so the position lands on the user's own account.",
 	SkillDescOverrides: map[string]string{
 		toolbridge.SkillEVM: "EVM transaction landing rail for Lendora builds: broadcast " +
 			"a caller-signed raw transaction and track its status. This agent serves " +
