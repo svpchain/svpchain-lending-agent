@@ -42,7 +42,7 @@
 #   --operator-key-file <path>     LOCAL hex eth_secp256k1 key, shipped 0600
 #                                  beside the config. Unset → keyless, and the
 #                                  execution skills refuse with a reason.
-#   --operator-capabilities <csv>  Default "trading".
+#   --operator-capabilities <csv>  Default "lendora.supply,…,lendora.repay".
 #   --operator-metadata <text>
 #
 # Optional families and tuning:
@@ -93,7 +93,7 @@ agent_chain_id="${SVPCHAIN_AGENT_CHAIN_ID:-}"
 agent_chain_rest="${SVPCHAIN_AGENT_CHAIN_REST:-}"
 public_url="${SVPCHAIN_AGENT_PUBLIC_URL:-https://agent-testnet.svpchain.org}"
 operator_key_file="${SVPCHAIN_AGENT_OPERATOR_KEY_FILE:-}"
-operator_capabilities="trading"
+operator_capabilities="lendora.supply,lendora.redeem,lendora.withdraw,lendora.borrow,lendora.repay"
 operator_metadata=""
 evm_rpc="${SVPCHAIN_EVM_RPC:-http://127.0.0.1:8545}"
 evm_lendora_comptroller="${SVPCHAIN_EVM_LENDORA_COMPTROLLER:-0x0faBb2B5057b14224b04E4cbB217Dd6b275f75a7}"
