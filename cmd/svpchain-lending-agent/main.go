@@ -2,12 +2,13 @@
 // money market on SVP-Chain: market and account reads, risk assessment,
 // unsigned supply/withdraw/borrow/repay/collateral tx building with an EVM
 // landing rail, self-service auth, faucet, the chain's agent/agentwallet
-// modules, and the SVP-DT execution core (identity, self-registration,
-// settlement) when an operator key is configured. Delegated lending writes
-// are future work; all builds are caller-signed.
+// modules, the SVP-DT execution core (identity, self-registration, settlement),
+// and delegated Lendora execution — supply, redeem, withdraw, borrow and repay
+// under an SVP-DT credential — when an operator key is configured.
 //
-// It is the lending-category slice of the full-surface svpchain-remote-agents;
-// the perps and EVM DeFi families live in their own binaries.
+// Everything it serves is implemented under internal/, which was the shared
+// svpchain-agent-core library until that repo was retired. The perps and EVM
+// DeFi families live in their own binaries.
 package main
 
 import (
@@ -18,9 +19,9 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/svpchain/svpchain-agent-core/a2aserver"
-	"github.com/svpchain/svpchain-agent-core/config"
-	"github.com/svpchain/svpchain-agent-core/wire"
+	"github.com/svpchain/svpchain-lending-agent/internal/a2aserver"
+	"github.com/svpchain/svpchain-lending-agent/internal/config"
+	"github.com/svpchain/svpchain-lending-agent/internal/wire"
 )
 
 func main() {

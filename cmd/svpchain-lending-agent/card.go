@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/svpchain/svpchain-agent-core/a2aserver"
-	"github.com/svpchain/svpchain-agent-core/toolbridge"
+	"github.com/svpchain/svpchain-lending-agent/internal/a2aserver"
+	"github.com/svpchain/svpchain-lending-agent/internal/toolbridge"
 )
 
 // identity is this agent's public face: the name, version, and description its
