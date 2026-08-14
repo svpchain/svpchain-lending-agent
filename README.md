@@ -40,6 +40,11 @@ go run ./cmd/svpchain-lending-agent -config cmd/svpchain-lending-agent/agent.tom
 Inspect without touching anything: `--print-config`, `--print-compose`,
 `--print-nginx`, `--dry-run`. Tear down with `--uninstall`.
 
+`--help` lists every flag. The only EVM options are `--evm-rpc` and
+`--evm-lendora-comptroller`, both of which this agent requires to boot
+(`cfg.RequireLendora`). There are no swap, oracle or bridge options:
+`wire.LendingProfile` builds none of those surfaces.
+
 ## Behind the reverse proxy
 
 The agents share one host, each on its own path: this one answers at

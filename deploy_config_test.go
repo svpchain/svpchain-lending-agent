@@ -40,12 +40,25 @@ func TestDeployScriptConfigParses(t *testing.T) {
 			"--operator-key-file", keyFile,
 			"--public-url", "https://agents.example.com",
 		},
-		"families-off": {
+		// The faucet is the only family this agent can be deployed without.
+		// Lendora is not optional here: main.go calls cfg.RequireLendora, so
+		// a config with no evm_rpc_url or comptroller is rejected at boot —
+		// see TestDeployedConfigSatisfiesLendoraGuard.
+		"faucet-off": {
 			"--print-config", "--host", "www@agent.example.com",
-			"--evm-rpc", "", "--faucet-url", "",
-			"--evm-uniswap-router", "", "--evm-wsvp", "", "--evm-oracle", "",
-			"--evm-lendora-comptroller", "", "--evm-bridge-routes", "",
-			"--evm-foreign-chains", "",
+			"--faucet-url", "",
+		},
+		// The other direction: every optional block the script can render, on
+		// at once, so a typo in one of those heredocs fails here rather than
+		// on a remote host. [agent_chain] is both-or-neither in core, which
+		// this also pins.
+		"all-optionals": {
+			"--print-config", "--host", "www@agent.example.com",
+			"--agent-chain-id", "svp-agent-1",
+			"--agent-chain-rest", "http://127.0.0.1:1317",
+			"--deposit-max-usdc", "1000", "--withdraw-max-usdc", "500",
+			"--transfer-max-usdc", "250", "--daily-withdraw-cap-usdc", "2000",
+			"--markets-refresh", "60s",
 		},
 	}
 
@@ -69,6 +82,20 @@ func TestDeployScriptConfigParses(t *testing.T) {
 			if name == "keyed" && cfg.Operator.KeyFile == "" {
 				t.Error("keyed variant must set key_file")
 			}
+			// Every variant must clear the guard the binary applies at boot:
+			// the deploy script has no business rendering a config this
+			// agent's own main.go would reject.
+			if err := cfg.RequireLendora(); err != nil {
+				t.Errorf("rendered config would not boot: %v\n%s", err, out)
+			}
+			if name == "all-optionals" {
+				if cfg.AgentChain.RestURL == "" {
+					t.Error("all-optionals must render [agent_chain]")
+				}
+				if cfg.Limits.DepositMaxUSDC != 1000 {
+					t.Errorf("deposit_max_usdc = %d, want 1000", cfg.Limits.DepositMaxUSDC)
+				}
+			}
 		})
 	}
 }
@@ -79,8 +106,9 @@ func TestDeployScriptConfigParses(t *testing.T) {
 // disagree on the path segment, the agent advertises a URL that 404s and reads
 // as unverified — with every process healthy and nothing in the logs.
 //
-// Both come from the same two shell functions, so this asserts they stay wired
-// to them rather than to two hand-maintained copies of the same fact.
+// Both come from the same two constants, AGENT_PORT and AGENT_SEGMENT, so this
+// asserts they stay wired to them rather than to two hand-maintained copies of
+// the same fact.
 func TestDeployScriptNginxRouteMatchesConfig(t *testing.T) {
 	script, err := filepath.Abs(filepath.Join("scripts", "deploy.sh"))
 	if err != nil {
