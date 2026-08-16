@@ -29,7 +29,7 @@ comptroller_addr = "0x…"
 # Operator key for delegated Lendora execution (supply/redeem/withdraw/
 # borrow/repay under SVP-DT credentials), on-chain self-registration, and
 # SVP-DT settlement. Optional: without it the execution skills refuse with a
-# reason. The SVPCHAIN_AGENT_OPERATOR_KEY env var takes precedence over key_file.
+# reason. The SVPCHAIN_LENDING_AGENT_OPERATOR_KEY env var takes precedence over key_file.
 #[operator]
 #key_file     = "operator.key"
 #capabilities = ["lendora.supply", "lendora.redeem", "lendora.withdraw", "lendora.borrow", "lendora.repay"]
