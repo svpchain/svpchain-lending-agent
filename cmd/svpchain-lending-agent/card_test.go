@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/svpchain/svpchain-mcp/lib/mcp/tools"
+	"github.com/svpchain/svpchain-lending-agent/internal/mcp/tools"
 
 	"github.com/svpchain/svpchain-lending-agent/internal/a2aserver"
 	"github.com/svpchain/svpchain-lending-agent/internal/agentchain"

@@ -1,7 +1,7 @@
 package toolbridge
 
 import (
-	"github.com/svpchain/svpchain-mcp/lib/mcp/tools"
+	"github.com/svpchain/svpchain-lending-agent/internal/mcp/tools"
 )
 
 // Skill IDs. One per operation family on the Agent Card; the registry tags

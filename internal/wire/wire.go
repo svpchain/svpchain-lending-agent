@@ -3,10 +3,12 @@
 // self-service auth stores, the policy engine, and the MCP tool handlers the
 // A2A tool bridge dispatches into.
 //
-// The body deliberately mirrors svpchain-mcp's cmd/mcp-server wiring (which is
-// package main and cannot be imported): same optional families, same
-// all-or-nothing rules, same graceful degradation. Drift between the two is a
-// bug in whichever copied last.
+// The body deliberately mirrors the wiring in svpchain-mcp's cmd/mcp-server:
+// same optional families, same all-or-nothing rules, same graceful
+// degradation. Drift between the two is a bug in whichever copied last — and
+// now that internal/mcp is a fork of that repo's lib/mcp rather than a
+// dependency on it (see internal/mcp/doc.go), nothing makes the drift fail
+// loudly. Check both when changing either.
 package wire
 
 import (
@@ -23,17 +25,17 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"google.golang.org/grpc"
 
-	"github.com/svpchain/svpchain-mcp/lib/mcp/auth"
-	"github.com/svpchain/svpchain-mcp/lib/mcp/builder"
-	"github.com/svpchain/svpchain-mcp/lib/mcp/chain"
-	"github.com/svpchain/svpchain-mcp/lib/mcp/faucet"
-	"github.com/svpchain/svpchain-mcp/lib/mcp/indexer"
-	"github.com/svpchain/svpchain-mcp/lib/mcp/lendora"
-	"github.com/svpchain/svpchain-mcp/lib/mcp/limits"
-	"github.com/svpchain/svpchain-mcp/lib/mcp/markets"
-	"github.com/svpchain/svpchain-mcp/lib/mcp/mcpcodec"
-	"github.com/svpchain/svpchain-mcp/lib/mcp/policy"
-	"github.com/svpchain/svpchain-mcp/lib/mcp/tools"
+	"github.com/svpchain/svpchain-lending-agent/internal/mcp/auth"
+	"github.com/svpchain/svpchain-lending-agent/internal/mcp/builder"
+	"github.com/svpchain/svpchain-lending-agent/internal/mcp/chain"
+	"github.com/svpchain/svpchain-lending-agent/internal/mcp/faucet"
+	"github.com/svpchain/svpchain-lending-agent/internal/mcp/indexer"
+	"github.com/svpchain/svpchain-lending-agent/internal/mcp/lendora"
+	"github.com/svpchain/svpchain-lending-agent/internal/mcp/limits"
+	"github.com/svpchain/svpchain-lending-agent/internal/mcp/markets"
+	"github.com/svpchain/svpchain-lending-agent/internal/mcp/mcpcodec"
+	"github.com/svpchain/svpchain-lending-agent/internal/mcp/policy"
+	"github.com/svpchain/svpchain-lending-agent/internal/mcp/tools"
 
 	"github.com/svpchain/svpchain-lending-agent/internal/agentchain"
 	"github.com/svpchain/svpchain-lending-agent/internal/agentrest"

@@ -10,7 +10,7 @@ import (
 	"github.com/svpchain/svpdt"
 
 	wallettypes "github.com/dydxprotocol/v4-chain/protocol/x/agentwallet/types"
-	"github.com/svpchain/svpchain-mcp/lib/mcp/builder"
+	"github.com/svpchain/svpchain-lending-agent/internal/mcp/builder"
 )
 
 // The cToken the fixture's Lendora credential is scoped to. Mixed case on

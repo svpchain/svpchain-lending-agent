@@ -12,8 +12,8 @@ import (
 
 	"github.com/svpchain/svpchain-lending-agent/internal/delegated"
 	"github.com/svpchain/svpchain-lending-agent/internal/marketdata"
+	"github.com/svpchain/svpchain-lending-agent/internal/mcp/tools"
 	"github.com/svpchain/svpchain-lending-agent/internal/toolbridge"
-	"github.com/svpchain/svpchain-mcp/lib/mcp/tools"
 )
 
 // Executor answers A2A tasks by dispatching them into the operation registry.

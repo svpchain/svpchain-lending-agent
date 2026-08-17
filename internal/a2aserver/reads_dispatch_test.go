@@ -22,12 +22,12 @@ import (
 
 	"github.com/svpchain/svpchain-lending-agent/internal/delegated"
 	"github.com/svpchain/svpchain-lending-agent/internal/marketdata"
+	"github.com/svpchain/svpchain-lending-agent/internal/mcp/auth"
+	"github.com/svpchain/svpchain-lending-agent/internal/mcp/indexer"
+	"github.com/svpchain/svpchain-lending-agent/internal/mcp/policy"
+	"github.com/svpchain/svpchain-lending-agent/internal/mcp/signer"
+	"github.com/svpchain/svpchain-lending-agent/internal/mcp/tools"
 	"github.com/svpchain/svpchain-lending-agent/internal/toolbridge"
-	"github.com/svpchain/svpchain-mcp/lib/mcp/auth"
-	"github.com/svpchain/svpchain-mcp/lib/mcp/indexer"
-	"github.com/svpchain/svpchain-mcp/lib/mcp/policy"
-	"github.com/svpchain/svpchain-mcp/lib/mcp/signer"
-	"github.com/svpchain/svpchain-mcp/lib/mcp/tools"
 )
 
 // readAgentQ serves one registered agent's public key to the proof resolver.
