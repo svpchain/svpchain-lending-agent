@@ -196,6 +196,14 @@ indexer_base_url = "${indexer}"
 evm_rpc_url      = "${evm_rpc}"
 
 EOF
+  cat <<EOF
+[fee]
+dynamic        = true
+gas_price      = "25000000000"
+gas_adjustment = 1.25
+max_gas_limit  = 2000000
+
+EOF
   [[ -f "${lendora_file}" ]] || fail "Lendora config file not found: ${lendora_file}; copy scripts/lendora.toml.example to lendora.toml and edit it"
   cat <<EOF
 

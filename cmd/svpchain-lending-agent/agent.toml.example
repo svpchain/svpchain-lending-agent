@@ -35,15 +35,15 @@ methods = [
   "exitMarket(address)",
 ]
 
-# Optional dynamic Cosmos fee pricing for delegated execution and registration.
+# Recommended dynamic Cosmos fee pricing for delegated execution and registration.
 # The agent simulates at max_gas_limit, then signs with gas_used times the
 # adjustment. gas_price is in asvp's smallest unit per Cosmos gas.
-#[fee]
-#denom = "asvp"
-#dynamic = true
-#gas_price = "25000000000"
-#gas_adjustment = 1.25
-#max_gas_limit = 2000000
+[fee]
+denom = "asvp"
+dynamic = true
+gas_price = "25000000000"
+gas_adjustment = 1.25
+max_gas_limit = 2000000
 
 # Optional testnet faucet backend; unset, the faucet tools refuse.
 #faucet_base_url = "http://127.0.0.1:8088"
