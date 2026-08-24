@@ -85,6 +85,7 @@ func (r *Registry) RegisterExecution(s *delegated.Service) {
 // executionLendoraTools is the delegated Lendora execution surface. Each acts
 // on the credential's principal via a forced-sender EVM call.
 var executionLendoraTools = []string{
+	"execute_evm_contract_method",
 	"execute_lendora_supply",
 	"execute_lendora_redeem",
 	"execute_lendora_withdraw",
@@ -102,9 +103,9 @@ func (r *Registry) RegisterExecutionLendora(s *delegated.Service) {
 		}
 		return
 	}
-	// Strict decoding: each input nests its parameters under a wrapper key
-	// ("supply", "redeem", "withdraw", "borrow", "repay"); flat args decoding
-	// to zero values would target a zero contract and amount.
+	// Strict decoding: each input nests its parameters under a wrapper key.
+	// Flat args decoding to zero values would target a zero contract and amount.
+	r.add(SkillExecutionLendora, "execute_evm_contract_method", adaptStrictNative(s.ExecuteEVMContractMethod))
 	r.add(SkillExecutionLendora, "execute_lendora_supply", adaptStrictNative(s.ExecuteLendoraSupply))
 	r.add(SkillExecutionLendora, "execute_lendora_redeem", adaptStrictNative(s.ExecuteLendoraRedeem))
 	r.add(SkillExecutionLendora, "execute_lendora_withdraw", adaptStrictNative(s.ExecuteLendoraWithdraw))

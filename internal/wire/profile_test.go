@@ -92,6 +92,7 @@ func TestLendingProfileServesTheDelegationStack(t *testing.T) {
 		"get_agent", "build_register_agent",
 		"get_delegation", "build_create_delegation",
 		"agent_identity", "agent_self_register", "execute_record_spend", "agent_claim",
+		"execute_evm_contract_method",
 	} {
 		if _, ok := r.Lookup(tool); !ok {
 			t.Errorf("profile %s missing delegation-stack tool %q", LendingProfile.Name, tool)

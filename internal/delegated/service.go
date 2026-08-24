@@ -42,10 +42,11 @@ const (
 
 // Config wires a Service.
 type Config struct {
-	Priv     *ethsecp256k1.PrivKey
-	Operator string // bech32 operator address (key-derived)
-	ChainID  string
-	Fee      operator.FeeSpec
+	Priv       *ethsecp256k1.PrivKey
+	Operator   string // bech32 operator address (key-derived)
+	ChainID    string
+	Fee        operator.FeeSpec
+	DynamicFee operator.DynamicFeeSpec
 
 	AgentQ  agentchain.AgentQuerier
 	AuthQ   AuthKeyQuerier
@@ -56,12 +57,20 @@ type Config struct {
 	Markets     *markets.Cache
 	Account     chain.AccountClient
 	Broadcast   chain.BroadcastClient
+	Simulation  chain.SimulationClient
 	Policy      *policy.Engine
 
 	// Lendora packs cToken calldata for delegated Lendora EVM calls. Nil
 	// unless the deployment configures the Lendora comptroller; the
 	// ExecuteLendora* methods refuse otherwise.
-	Lendora *builder.Lendora
+	Lendora        *builder.Lendora
+	LendoraMethods []string
+
+	// IsLendoraContract admits only cToken markets discovered from this
+	// deployment's Comptroller. Comptroller writes are separately pinned to the
+	// configured builder's Comptroller address. Nil is reserved for unit
+	// fixtures; production wiring always supplies it.
+	IsLendoraContract func(contract string) bool
 
 	// Limits caps delegated funds movements per tx, same knobs as the
 	// caller-signed build path. The chain-side delegation budget is the
@@ -262,7 +271,7 @@ func (s *Service) execute(ctx context.Context, tokens [][]byte, verified *svpdt.
 	if err != nil {
 		return ExecResult{}, fmt.Errorf("read operator account: %w", err)
 	}
-	raw, err := operator.SignTx(s.cfg.Priv, s.cfg.ChainID, acct, msgs, s.cfg.Fee, gasFree)
+	raw, _, err := operator.SignTxWithSimulatedFee(ctx, s.cfg.Priv, s.cfg.ChainID, acct, msgs, s.cfg.Fee, s.cfg.DynamicFee, gasFree, s.cfg.Simulation)
 	if err != nil {
 		return ExecResult{}, err
 	}
@@ -556,7 +565,7 @@ func (s *Service) signAndBroadcastOwn(ctx context.Context, msg sdk.Msg) (ExecRes
 	if err != nil {
 		return ExecResult{}, fmt.Errorf("read operator account: %w", err)
 	}
-	raw, err := operator.SignTx(s.cfg.Priv, s.cfg.ChainID, acct, []sdk.Msg{msg}, s.cfg.Fee, false)
+	raw, _, err := operator.SignTxWithSimulatedFee(ctx, s.cfg.Priv, s.cfg.ChainID, acct, []sdk.Msg{msg}, s.cfg.Fee, s.cfg.DynamicFee, false, s.cfg.Simulation)
 	if err != nil {
 		return ExecResult{}, err
 	}

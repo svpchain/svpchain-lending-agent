@@ -36,6 +36,31 @@ go run ./cmd/svpchain-lending-agent -config cmd/svpchain-lending-agent/agent.tom
 `/healthz` answers load-balancer liveness checks; the Agent Card is at
 `/.well-known/agent-card.json`.
 
+### Local agent fixture
+
+```sh
+cp scripts/lendora.toml.example lendora.toml
+$EDITOR lendora.toml
+./scripts/local-lending-agent.sh start
+```
+
+The launcher starts the protocol local agent chain when needed, funds the local
+operator, and manages `start`, `stop`, `status`, `logs`, `register`, and
+`update`. The local chain fixture does not deploy Lendora, so a deployed local
+Comptroller address is required in `lendora.toml`. Individual cToken market
+addresses are discovered from the Comptroller and supplied per Lendora
+operation. `evm.lendora.methods` is the delegated-execution whitelist: remove
+a signature to disable its delegated operation. Pass `--lendora-file <path>` or set
+`LENDING_AGENT_LOCAL_LENDORA_FILE` to use a config outside the repository.
+The Agent Card exposes `svpchain-execution-lendora` / `execute_evm_contract_method`.
+Its `args.call` contains `contract`, ABI `method`, and ABI-shaped `args`: cToken
+writes take `["1000000"]`, `enterMarkets(address[])` takes
+`[["0xcToken..."]]`, and `exitMarket(address)` takes `["0xcToken..."]`.
+`evm.lendora.methods` remains the authorization whitelist. Comptroller methods
+can target only the configured Comptroller and reference only markets discovered
+from it. At startup the Card names that Comptroller, its discovered cToken
+contracts, and the enabled method signatures.
+
 ## Deploying
 
 ```sh
@@ -80,7 +105,8 @@ Inspect without touching anything: `--print-env`, `--print-config`,
 
 `--help` lists every flag. The only EVM options are `--evm-rpc` and
 `--evm-lendora-comptroller`, both of which this agent requires to boot
-(`cfg.RequireLendora`). There are no swap, oracle or bridge options:
+(`cfg.RequireLendora`); set the delegated method whitelist with
+`SVPCHAIN_EVM_LENDORA_METHODS` in the deploy config file. There are no swap, oracle or bridge options:
 `wire.LendingProfile` builds none of those surfaces.
 
 ## Behind the reverse proxy

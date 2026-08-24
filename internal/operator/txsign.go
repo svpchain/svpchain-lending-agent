@@ -1,7 +1,10 @@
 package operator
 
 import (
+	"context"
 	"fmt"
+	"math"
+	"math/big"
 
 	sdkmath "cosmossdk.io/math"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
@@ -24,6 +27,81 @@ type FeeSpec struct {
 	Denom    string
 	Amount   string
 	GasLimit uint64
+}
+
+// DynamicFeeSpec configures simulation-backed fee pricing. GasPrice is in the
+// fee denom's smallest unit per Cosmos gas unit.
+type DynamicFeeSpec struct {
+	Enabled       bool
+	GasPrice      string
+	GasAdjustment float64
+	MaxGasLimit   uint64
+}
+
+// SignTxWithSimulatedFee signs once for simulation at MaxGasLimit, then signs
+// again using the simulated gas with the configured adjustment. The simulated
+// fee is deliberately priced at the maximum limit so the ante handler accepts
+// it even on chains enforcing a minimum gas price.
+func SignTxWithSimulatedFee(
+	ctx context.Context,
+	priv *ethsecp256k1.PrivKey,
+	chainID string,
+	acct chain.AccountInfo,
+	msgs []sdk.Msg,
+	fee FeeSpec,
+	dynamic DynamicFeeSpec,
+	gasFree bool,
+	simulator chain.SimulationClient,
+) ([]byte, FeeSpec, error) {
+	if gasFree || !dynamic.Enabled {
+		raw, err := SignTx(priv, chainID, acct, msgs, fee, gasFree)
+		return raw, fee, err
+	}
+	if simulator == nil {
+		return nil, FeeSpec{}, fmt.Errorf("dynamic fee is enabled but transaction simulation is unavailable")
+	}
+	if dynamic.MaxGasLimit == 0 {
+		return nil, FeeSpec{}, fmt.Errorf("dynamic fee max gas limit must be positive")
+	}
+	if dynamic.GasAdjustment < 1 || math.IsNaN(dynamic.GasAdjustment) || math.IsInf(dynamic.GasAdjustment, 0) {
+		return nil, FeeSpec{}, fmt.Errorf("dynamic fee gas adjustment must be finite and at least 1")
+	}
+
+	price, ok := sdkmath.NewIntFromString(dynamic.GasPrice)
+	if !ok || !price.IsPositive() {
+		return nil, FeeSpec{}, fmt.Errorf("dynamic fee gas price %q must be a positive integer", dynamic.GasPrice)
+	}
+	provisional := fee
+	provisional.GasLimit = dynamic.MaxGasLimit
+	provisional.Amount = feeAmount(price, provisional.GasLimit)
+	raw, err := SignTx(priv, chainID, acct, msgs, provisional, false)
+	if err != nil {
+		return nil, FeeSpec{}, err
+	}
+	simulated, err := simulator.Simulate(ctx, raw)
+	if err != nil {
+		return nil, FeeSpec{}, fmt.Errorf("simulate transaction gas: %w", err)
+	}
+	gasLimit := uint64(math.Ceil(float64(simulated.GasUsed) * dynamic.GasAdjustment))
+	if gasLimit == 0 {
+		return nil, FeeSpec{}, fmt.Errorf("simulate transaction gas: gas used is zero")
+	}
+	if gasLimit > dynamic.MaxGasLimit {
+		return nil, FeeSpec{}, fmt.Errorf("simulated gas limit %d exceeds configured fee.max_gas_limit %d", gasLimit, dynamic.MaxGasLimit)
+	}
+	finalFee := fee
+	finalFee.GasLimit = gasLimit
+	finalFee.Amount = feeAmount(price, gasLimit)
+	raw, err = SignTx(priv, chainID, acct, msgs, finalFee, false)
+	if err != nil {
+		return nil, FeeSpec{}, err
+	}
+	return raw, finalFee, nil
+}
+
+func feeAmount(price sdkmath.Int, gasLimit uint64) string {
+	gas := new(big.Int).SetUint64(gasLimit)
+	return new(big.Int).Mul(price.BigInt(), gas).String()
 }
 
 // SignTx builds and signs a transaction in one step: Any-packs msgs into a

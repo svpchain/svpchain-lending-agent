@@ -271,12 +271,13 @@ func BuildProfile(ctx context.Context, cfg *config.Config, p Profile) (*App, err
 	// chain's Cosmos REST API instead.
 	agentChainID := cfg.DEXChain.ID
 	var (
-		agentQ         agentchain.AgentQuerier
-		walletQ        agentchain.WalletQuerier
-		settlementQ    delegated.SettlementQuerier
-		agentAccount   chain.AccountClient   = chainDeps.Account
-		agentBroadcast chain.BroadcastClient = chainDeps.Broadcast
-		agentAuth      delegated.AuthAccountQuerier
+		agentQ          agentchain.AgentQuerier
+		walletQ         agentchain.WalletQuerier
+		settlementQ     delegated.SettlementQuerier
+		agentAccount    chain.AccountClient    = chainDeps.Account
+		agentBroadcast  chain.BroadcastClient  = chainDeps.Broadcast
+		agentSimulation chain.SimulationClient = chain.NewSimulationClient(grpcConn)
+		agentAuth       delegated.AuthAccountQuerier
 	)
 	if cfg.AgentChain.Enabled() {
 		rest := agentrest.New(cfg.AgentChain.RestURL, encCfg.Codec, encCfg.InterfaceRegistry)
@@ -286,6 +287,7 @@ func BuildProfile(ctx context.Context, cfg *config.Config, p Profile) (*App, err
 		settlementQ = rest
 		agentAccount = rest.AccountClient()
 		agentBroadcast = rest
+		agentSimulation = rest
 		agentAuth = rest
 		logger.Info("agent chain configured", "chain_id", agentChainID, "rest", cfg.AgentChain.RestURL)
 	} else {
@@ -307,11 +309,12 @@ func BuildProfile(ctx context.Context, cfg *config.Config, p Profile) (*App, err
 	}
 	var delegatedSvc *delegated.Service
 	if operatorPriv != nil {
-		delegatedSvc = delegated.New(delegated.Config{
+		delegatedCfg := delegated.Config{
 			Priv:        operatorPriv,
 			Operator:    operatorAddr,
 			ChainID:     agentChainID,
 			Fee:         operator.FeeSpec{Denom: cfg.Fee.Denom, Amount: cfg.Fee.Amount, GasLimit: cfg.Fee.GasLimit},
+			DynamicFee:  operator.DynamicFeeSpec{Enabled: cfg.Fee.Dynamic, GasPrice: cfg.Fee.GasPrice, GasAdjustment: cfg.Fee.GasAdjustment, MaxGasLimit: cfg.Fee.MaxGasLimit},
 			AgentQ:      agentQ,
 			AuthQ:       delegated.NewAuthKeyClient(agentAuth, encCfg.InterfaceRegistry),
 			WalletQ:     walletQ,
@@ -319,15 +322,24 @@ func BuildProfile(ctx context.Context, cfg *config.Config, p Profile) (*App, err
 			Markets:     mkts,
 			Account:     agentAccount,
 			Broadcast:   agentBroadcast,
+			Simulation:  agentSimulation,
 			Policy:      policyEngine,
 			Limits:      limitsCfg,
 			// Nil unless the Lendora comptroller is configured; the delegated
 			// Lendora execute ops refuse when nil.
-			Lendora:      evmDeps.Lendora,
-			Endpoint:     cfg.PublicURL,
-			Capabilities: cfg.Operator.Capabilities,
-			Metadata:     cfg.Operator.Metadata,
-		})
+			Lendora:        evmDeps.Lendora,
+			LendoraMethods: cfg.EVM.Lendora.Methods,
+			Endpoint:       cfg.PublicURL,
+			Capabilities:   cfg.Operator.Capabilities,
+			Metadata:       cfg.Operator.Metadata,
+		}
+		if lendoraMkts != nil {
+			delegatedCfg.IsLendoraContract = func(contract string) bool {
+				_, ok := lendoraMkts.Resolve(contract)
+				return ok
+			}
+		}
+		delegatedSvc = delegated.New(delegatedCfg)
 		logger.Info("delegated execution enabled", "operator", operatorAddr)
 	}
 

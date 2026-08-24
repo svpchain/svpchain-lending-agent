@@ -17,6 +17,7 @@ import (
 	agenttypes "github.com/dydxprotocol/v4-chain/protocol/x/agent/types"
 	wallettypes "github.com/dydxprotocol/v4-chain/protocol/x/agentwallet/types"
 
+	"github.com/svpchain/svpchain-lending-agent/internal/mcp/chain"
 	"github.com/svpchain/svpchain-lending-agent/internal/mcp/mcpcodec"
 )
 
@@ -147,6 +148,30 @@ func TestBroadcastSyncPostsAndDecodes(t *testing.T) {
 	}
 	if gotBody["mode"] != "BROADCAST_MODE_SYNC" {
 		t.Errorf("mode %q", gotBody["mode"])
+	}
+}
+
+func TestSimulatePostsAndDecodesGasUsed(t *testing.T) {
+	var gotBody map[string]string
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/cosmos/tx/v1beta1/simulate" {
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
+			t.Fatal(err)
+		}
+		_, _ = w.Write([]byte(`{"gas_info":{"gas_wanted":"1000","gas_used":"800"}}`))
+	})
+
+	res, err := c.Simulate(context.Background(), []byte{0xca, 0xfe})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res != (chain.SimulationResult{GasUsed: 800}) {
+		t.Errorf("result %+v", res)
+	}
+	if gotBody["tx_bytes"] != base64.StdEncoding.EncodeToString([]byte{0xca, 0xfe}) {
+		t.Errorf("tx_bytes %q", gotBody["tx_bytes"])
 	}
 }
 

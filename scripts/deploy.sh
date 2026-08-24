@@ -69,7 +69,7 @@
 #                                  /run/secrets/operator_key — never as a container
 #                                  environment variable, which `docker inspect` and
 #                                  /proc/<pid>/environ would both expose.
-#   --operator-capabilities <csv>  Default "lendora.supply,…,lendora.repay".
+#   --operator-capabilities <csv>  Default "evm.contract_call".
 #                                  SVPCHAIN_OPERATOR_CAPABILITIES
 #   --operator-metadata <text>     SVPCHAIN_OPERATOR_METADATA
 #
@@ -79,6 +79,8 @@
 #                                  SVPCHAIN_EVM_RPC
 #   --evm-lendora-comptroller <a>  Lendora comptroller address. Needs --evm-rpc.
 #                                  SVPCHAIN_EVM_LENDORA_COMPTROLLER
+#                                  Delegated methods come from
+#                                  SVPCHAIN_EVM_LENDORA_METHODS (CSV).
 #   --faucet-url <url>             Empty → the faucet skills refuse.
 #                                  SVPCHAIN_FAUCET_URL
 #   --markets-refresh <dur>        Default 30s; also the Lendora market cache.
@@ -190,7 +192,7 @@ readonly CONFIG_VARS=(
   SVPCHAIN_INDEXER SVPCHAIN_AGENT_CHAIN_ID SVPCHAIN_AGENT_CHAIN_REST
   SVPCHAIN_AGENT_PUBLIC_URL SVPCHAIN_LENDING_AGENT_OPERATOR_KEY
   SVPCHAIN_OPERATOR_CAPABILITIES SVPCHAIN_OPERATOR_METADATA SVPCHAIN_INSTALL_DIR
-  SVPCHAIN_EVM_RPC SVPCHAIN_EVM_LENDORA_COMPTROLLER SVPCHAIN_FAUCET_URL
+  SVPCHAIN_EVM_RPC SVPCHAIN_EVM_LENDORA_COMPTROLLER SVPCHAIN_EVM_LENDORA_METHODS SVPCHAIN_FAUCET_URL
   SVPCHAIN_MARKETS_REFRESH SVPCHAIN_DEPOSIT_MAX_USDC SVPCHAIN_WITHDRAW_MAX_USDC
   SVPCHAIN_TRANSFER_MAX_USDC SVPCHAIN_DAILY_WITHDRAW_CAP_USDC
 )
@@ -262,10 +264,11 @@ public_url="${SVPCHAIN_AGENT_PUBLIC_URL:-https://agent-testnet.svpchain.org}"
 # a hex key in argv is visible in `ps` and lands in shell history. The config
 # file is sourced, so it can compute the value instead of storing it.
 operator_key="${SVPCHAIN_LENDING_AGENT_OPERATOR_KEY:-}"
-operator_capabilities="${SVPCHAIN_OPERATOR_CAPABILITIES:-lendora.supply,lendora.redeem,lendora.withdraw,lendora.borrow,lendora.repay}"
+operator_capabilities="${SVPCHAIN_OPERATOR_CAPABILITIES:-evm.contract_call}"
 operator_metadata="${SVPCHAIN_OPERATOR_METADATA:-}"
 evm_rpc="${SVPCHAIN_EVM_RPC:-http://127.0.0.1:8545}"
-evm_lendora_comptroller="${SVPCHAIN_EVM_LENDORA_COMPTROLLER:-0x0faBb2B5057b14224b04E4cbB217Dd6b275f75a7}"
+evm_lendora_comptroller="${SVPCHAIN_EVM_LENDORA_COMPTROLLER:-0x0fabb2b5057b14224b04e4cbb217dd6b275f75a7}"
+evm_lendora_methods="${SVPCHAIN_EVM_LENDORA_METHODS:-mint(uint256),redeem(uint256),redeemUnderlying(uint256),borrow(uint256),repayBorrow(uint256)}"
 faucet_url="${SVPCHAIN_FAUCET_URL:-https://pre-faucet.svpchain.org}"
 install_dir="${SVPCHAIN_INSTALL_DIR:-~/svpchain-lending-agent}"
 image_tag=""
@@ -354,6 +357,21 @@ emit_operator_capabilities() {
   printf '%s' "$out"
 }
 
+emit_lendora_methods() {
+  local out="[" first=1 method saved_ifs="$IFS"
+  IFS=','
+  for method in $evm_lendora_methods; do
+    method="${method// /}"
+    [[ -z "$method" ]] && continue
+    [[ "$first" == "1" ]] || out+=", "
+    out+="\"${method}\""
+    first=0
+  done
+  IFS="$saved_ifs"
+  out+="]"
+  printf '%s' "$out"
+}
+
 # render_agent_toml — emit this agent's agent.toml on stdout. Takes no
 # arguments on purpose: --print-config and the deploy render it the same way
 # from the same globals, so a preview is the file that ships.
@@ -407,6 +425,7 @@ EOF
     echo ""
     echo "[evm.lendora]"
     echo "comptroller_addr = \"${evm_lendora_comptroller}\""
+    echo "methods = $(emit_lendora_methods)"
   fi
   cat <<EOF
 
@@ -672,7 +691,7 @@ if [[ "$mode" == "print-env" ]]; then
     SVPCHAIN_COMET_RPC SVPCHAIN_INDEXER SVPCHAIN_AGENT_CHAIN_ID
     SVPCHAIN_AGENT_CHAIN_REST SVPCHAIN_AGENT_PUBLIC_URL
     SVPCHAIN_LENDING_AGENT_OPERATOR_KEY SVPCHAIN_OPERATOR_CAPABILITIES
-    SVPCHAIN_OPERATOR_METADATA SVPCHAIN_EVM_RPC SVPCHAIN_EVM_LENDORA_COMPTROLLER
+    SVPCHAIN_OPERATOR_METADATA SVPCHAIN_EVM_RPC SVPCHAIN_EVM_LENDORA_COMPTROLLER SVPCHAIN_EVM_LENDORA_METHODS
     SVPCHAIN_FAUCET_URL SVPCHAIN_MARKETS_REFRESH
     SVPCHAIN_DEPOSIT_MAX_USDC SVPCHAIN_WITHDRAW_MAX_USDC
     SVPCHAIN_TRANSFER_MAX_USDC SVPCHAIN_DAILY_WITHDRAW_CAP_USDC
@@ -683,7 +702,7 @@ if [[ "$mode" == "print-env" ]]; then
     "$comet_rpc" "$indexer" "$agent_chain_id"
     "$agent_chain_rest" "$public_url"
     "$operator_key" "$operator_capabilities"
-    "$operator_metadata" "$evm_rpc" "$evm_lendora_comptroller"
+    "$operator_metadata" "$evm_rpc" "$evm_lendora_comptroller" "$evm_lendora_methods"
     "$faucet_url" "$markets_refresh"
     "$deposit_max" "$withdraw_max"
     "$transfer_max" "$daily_withdraw_cap"

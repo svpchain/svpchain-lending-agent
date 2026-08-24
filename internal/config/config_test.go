@@ -104,6 +104,31 @@ amount = "not-a-number"
 	}
 }
 
+func TestDynamicFeeValidation(t *testing.T) {
+	cfg, err := Load(writeConfig(t, minimal+`
+[fee]
+dynamic = true
+gas_price = "25000000000"
+gas_adjustment = 1.25
+max_gas_limit = 2000000
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.Fee.Dynamic || cfg.Fee.MaxGasLimit != 2_000_000 {
+		t.Fatalf("dynamic fee config not loaded: %+v", cfg.Fee)
+	}
+
+	_, err = Load(writeConfig(t, minimal+`
+[fee]
+dynamic = true
+gas_price = "0"
+`))
+	if err == nil || !strings.Contains(err.Error(), "fee.gas_price") {
+		t.Fatalf("expected gas price validation error, got %v", err)
+	}
+}
+
 // ★ The swap/oracle/bridge schema was removed with the EVM DeFi surface, but
 // agents already deployed have an agent.toml on disk that may still carry those
 // blocks. TOML decoding must ignore them rather than reject the file —

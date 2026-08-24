@@ -20,8 +20,30 @@ indexer_base_url = "http://127.0.0.1:3002"
 evm_rpc_url      = "http://127.0.0.1:8545"
 
 # Required for this binary: the Lendora (Compound V2 fork) Comptroller.
+# methods is the delegated-execution whitelist. Remove a signature to make its
+# execute_evm_contract_method and typed execute_lendora_* operations refuse
+# before they broadcast.
 [evm.lendora]
 comptroller_addr = "0x…"
+methods = [
+  "mint(uint256)",
+  "redeem(uint256)",
+  "redeemUnderlying(uint256)",
+  "borrow(uint256)",
+  "repayBorrow(uint256)",
+  "enterMarkets(address[])",
+  "exitMarket(address)",
+]
+
+# Optional dynamic Cosmos fee pricing for delegated execution and registration.
+# The agent simulates at max_gas_limit, then signs with gas_used times the
+# adjustment. gas_price is in asvp's smallest unit per Cosmos gas.
+#[fee]
+#denom = "asvp"
+#dynamic = true
+#gas_price = "25000000000"
+#gas_adjustment = 1.25
+#max_gas_limit = 2000000
 
 # Optional testnet faucet backend; unset, the faucet tools refuse.
 #faucet_base_url = "http://127.0.0.1:8088"
@@ -32,5 +54,5 @@ comptroller_addr = "0x…"
 # reason. The SVPCHAIN_LENDING_AGENT_OPERATOR_KEY env var takes precedence over key_file.
 #[operator]
 #key_file     = "operator.key"
-#capabilities = ["lendora.supply", "lendora.redeem", "lendora.withdraw", "lendora.borrow", "lendora.repay"]
+#capabilities = ["evm.contract_call"]
 #metadata     = "svpchain Lendora lending agent"

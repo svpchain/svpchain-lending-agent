@@ -13,7 +13,9 @@ package config
 
 import (
 	"fmt"
+	stdmath "math"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"cosmossdk.io/math"
@@ -95,10 +97,12 @@ type EVMConfig struct {
 	Lendora LendoraConfig `toml:"lendora"`
 }
 
-// LendoraConfig binds the lendora_* operations to a Lendora (Compound V2
-// fork) Comptroller.
+// LendoraConfig binds this agent to a Lendora (Compound V2 fork)
+// Comptroller. Methods is the explicit delegated-execution whitelist; a
+// configured signature permits the corresponding execute_lendora_* operation.
 type LendoraConfig struct {
-	ComptrollerAddr string `toml:"comptroller_addr"`
+	ComptrollerAddr string   `toml:"comptroller_addr"`
+	Methods         []string `toml:"methods"`
 }
 
 // Operator configures the agent's own on-chain identity: the eth_secp256k1
@@ -120,11 +124,16 @@ type Operator struct {
 }
 
 // FeeConfig sets the gas fee stamped onto non-CLOB txs. Short-term CLOB
-// orders are gas-free on svpchain and always ship with an empty fee.
+// orders are gas-free on svpchain and always ship with an empty fee. Dynamic
+// mode simulates the exact signed Cosmos transaction before broadcasting it.
 type FeeConfig struct {
-	Denom    string `toml:"denom"`
-	Amount   string `toml:"amount"`
-	GasLimit uint64 `toml:"gas_limit"`
+	Denom         string  `toml:"denom"`
+	Amount        string  `toml:"amount"`
+	GasLimit      uint64  `toml:"gas_limit"`
+	Dynamic       bool    `toml:"dynamic"`
+	GasPrice      string  `toml:"gas_price"`
+	GasAdjustment float64 `toml:"gas_adjustment"`
+	MaxGasLimit   uint64  `toml:"max_gas_limit"`
 }
 
 // LimitsConfig caps the size of funds movements, in human USDC. Zero
@@ -218,13 +227,17 @@ func (c *Config) Validate() error {
 }
 
 // RequireLendora enforces what the lending binary cannot serve without: the
-// EVM endpoint (its builds land as EVM txs) and the Lendora comptroller.
+// EVM endpoint (its builds land as EVM txs), the Lendora comptroller, and at
+// least one reviewed method.
 func (c *Config) RequireLendora() error {
 	if c.DEXChain.EVMRPCURL == "" {
 		return fmt.Errorf("dex_chain.evm_rpc_url is required: Lendora operations run against the chain's EVM side")
 	}
 	if c.EVM.Lendora.ComptrollerAddr == "" {
 		return fmt.Errorf("evm.lendora.comptroller_addr is required: this binary serves the Lendora money market")
+	}
+	if len(c.EVM.Lendora.Methods) == 0 {
+		return fmt.Errorf("evm.lendora.methods is required: configure the delegated Lendora methods this deployment may execute")
 	}
 	return nil
 }
@@ -237,19 +250,42 @@ func (c *Config) validateLendora() error {
 	if !common.IsHexAddress(c.EVM.Lendora.ComptrollerAddr) {
 		return fmt.Errorf("evm.lendora.comptroller_addr %q is not a valid 0x address", c.EVM.Lendora.ComptrollerAddr)
 	}
+	// Contract caveats and the Agent Card use lowercase 0x addresses. Normalize
+	// here so a checksummed TOML value cannot create two textual identities for
+	// the same Comptroller.
+	c.EVM.Lendora.ComptrollerAddr = strings.ToLower(common.HexToAddress(c.EVM.Lendora.ComptrollerAddr).Hex())
 	if c.DEXChain.EVMRPCURL == "" {
 		return fmt.Errorf("dex_chain.evm_rpc_url is required when evm.lendora.comptroller_addr is set")
 	}
+	seen := make(map[string]bool, len(c.EVM.Lendora.Methods))
+	for i, method := range c.EVM.Lendora.Methods {
+		if !isConfiguredMethodSignature(method) {
+			return fmt.Errorf("evm.lendora.methods[%d] %q must be a whitespace-free ABI signature", i, method)
+		}
+		if seen[method] {
+			return fmt.Errorf("evm.lendora.methods[%d] %q is declared more than once", i, method)
+		}
+		seen[method] = true
+	}
 	return nil
+}
+
+func isConfiguredMethodSignature(method string) bool {
+	open := strings.IndexByte(method, '(')
+	return open > 0 && strings.HasSuffix(method, ")") && !strings.ContainsAny(method, " \t\n") &&
+		!strings.ContainsAny(method[open+1:len(method)-1], "()")
 }
 
 // Default fee applied to non-CLOB txs when the [fee] section is absent.
 // Matches a chain whose minimum-gas-prices is 25000000000asvp at a
 // 1,000,000 gas limit (≈0.025 SVP total).
 const (
-	DefaultFeeDenom    = "asvp"
-	DefaultFeeAmount   = "25000000000000000"
-	DefaultFeeGasLimit = uint64(1_000_000)
+	DefaultFeeDenom         = "asvp"
+	DefaultFeeAmount        = "25000000000000000"
+	DefaultFeeGasLimit      = uint64(1_000_000)
+	DefaultFeeGasPrice      = "25000000000"
+	DefaultFeeGasAdjustment = 1.25
+	DefaultFeeMaxGasLimit   = uint64(2_000_000)
 )
 
 func (f *FeeConfig) applyDefaults() {
@@ -261,6 +297,15 @@ func (f *FeeConfig) applyDefaults() {
 	}
 	if f.GasLimit == 0 {
 		f.GasLimit = DefaultFeeGasLimit
+	}
+	if f.GasPrice == "" {
+		f.GasPrice = DefaultFeeGasPrice
+	}
+	if f.GasAdjustment == 0 {
+		f.GasAdjustment = DefaultFeeGasAdjustment
+	}
+	if f.MaxGasLimit == 0 {
+		f.MaxGasLimit = DefaultFeeMaxGasLimit
 	}
 }
 
@@ -274,6 +319,19 @@ func (f *FeeConfig) validate() error {
 	}
 	if amt.IsNegative() {
 		return fmt.Errorf("fee.amount %q must be non-negative", f.Amount)
+	}
+	if !f.Dynamic {
+		return nil
+	}
+	price, ok := math.NewIntFromString(f.GasPrice)
+	if !ok || !price.IsPositive() {
+		return fmt.Errorf("fee.gas_price %q must be a positive integer when fee.dynamic is enabled", f.GasPrice)
+	}
+	if stdmath.IsNaN(f.GasAdjustment) || stdmath.IsInf(f.GasAdjustment, 0) || f.GasAdjustment < 1 {
+		return fmt.Errorf("fee.gas_adjustment must be finite and at least 1 when fee.dynamic is enabled")
+	}
+	if f.MaxGasLimit == 0 {
+		return fmt.Errorf("fee.max_gas_limit must be positive when fee.dynamic is enabled")
 	}
 	return nil
 }

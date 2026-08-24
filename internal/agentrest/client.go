@@ -34,8 +34,8 @@ import (
 
 // Client implements the agent-chain surface over REST. It satisfies
 // agentchain.AgentQuerier, agentchain.WalletQuerier, chain.BroadcastClient,
-// and delegated.AuthAccountQuerier; AccountClient() adapts it to the
-// chain.AccountClient shape the tx builders take.
+// chain.SimulationClient, and delegated.AuthAccountQuerier; AccountClient()
+// adapts it to the chain.AccountClient shape the tx builders take.
 type Client struct {
 	base     string
 	http     *http.Client
@@ -265,4 +265,28 @@ func (c *Client) BroadcastSync(ctx context.Context, txBytes []byte) (chain.Broad
 		Code:   out.TxResponse.Code,
 		RawLog: out.TxResponse.RawLog,
 	}, nil
+}
+
+// Simulate executes a signed transaction through the agent chain's REST
+// gateway without committing it, returning the gas it consumed.
+func (c *Client) Simulate(ctx context.Context, txBytes []byte) (chain.SimulationResult, error) {
+	reqBody, err := json.Marshal(map[string]string{
+		"tx_bytes": base64.StdEncoding.EncodeToString(txBytes),
+	})
+	if err != nil {
+		return chain.SimulationResult{}, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base+"/cosmos/tx/v1beta1/simulate", bytes.NewReader(reqBody))
+	if err != nil {
+		return chain.SimulationResult{}, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	out := &sdktx.SimulateResponse{}
+	if err := c.do(req, out); err != nil {
+		return chain.SimulationResult{}, err
+	}
+	if out.GasInfo == nil {
+		return chain.SimulationResult{}, fmt.Errorf("agent chain REST simulate: empty gas info")
+	}
+	return chain.SimulationResult{GasUsed: out.GasInfo.GasUsed}, nil
 }

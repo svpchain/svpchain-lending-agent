@@ -5,6 +5,7 @@
 
 # `go build ./cmd/<name>` (no -o) drops a 50-150MB binary in the repo root.
 /svpchain-lending-agent
+/lendora.toml
 
 # Operator key material. Never committed.
 *.key

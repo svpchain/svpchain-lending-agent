@@ -172,24 +172,25 @@ var skillMetas = []skillMeta{
 	{
 		id:   toolbridge.SkillExecutionLendora,
 		name: "SVP-Chain Delegated Lendora Execution",
-		desc: "Supply, redeem, withdraw, borrow, and repay on the Lendora money market " +
-			"on behalf of a user under an SVP-DT delegation credential. Each is an EVM " +
-			"call the agent executes with the sender forced to the credential's " +
-			"principal — the position and balances land on the user's own account, " +
-			"never the agent's. Authority comes entirely from the credential chain: the " +
-			"cToken contract must be inside the credential's contracts caveat and the " +
-			"delegation's on-chain contract limits, and the matching action must be " +
-			"granted (supply→lendora.supply, redeem→lendora.redeem, " +
-			"withdraw→lendora.withdraw, borrow→lendora.borrow, repay→lendora.repay). " +
-			"The credential rides message.metadata under \"svp.delegation/v1\". Each " +
-			"tool nests its parameters under a wrapper key — \"supply\", \"redeem\", " +
-			"\"withdraw\", \"borrow\", \"repay\" — each carrying the cToken address and " +
-			"an amount in the token's base units; a caller must have approved the cToken " +
-			"to spend the underlying beforehand (a user action, not delegated).",
+		desc: "Execute configured Lendora cToken and Comptroller ABI methods on behalf of a user under an " +
+			"SVP-DT delegation credential. execute_evm_contract_method takes " +
+			"args.call.contract, args.call.method, and args.call.args; the runtime " +
+			"Card declares the configured Comptroller, discovered cToken addresses, and " +
+			"enabled ABI signatures. The typed supply/redeem/withdraw/borrow/repay tools " +
+			"remain available for compatibility. Each is an EVM call the agent executes " +
+			"with the sender forced to the credential's principal — the position and " +
+			"balances land on the user's own account, never the agent's. Authority comes " +
+			"entirely from the credential chain: the cToken or Comptroller contract must be inside the " +
+			"credential's contracts caveat and the delegation's on-chain contract limits. " +
+			"The credential must grant evm.contract_call and carry the Task binding for " +
+			"this principal, target contract, and method selector. The credential rides " +
+			"message.metadata under \"svp.delegation/v1\".",
 		tags: []string{"execution", "lendora", "lending", "delegation", "svp-dt", "evm"},
 		examples: []string{
 			`message.metadata: {"svp.delegation/v1":{"tokens":["<base64 token>", "…"]}} · ` +
-				`text: {"skill":"svpchain-execution-lendora","tool":"execute_lendora_supply","args":{"supply":{"ctoken":"0x…","amount":"1000000"}}}`,
+				`text: {"skill":"svpchain-execution-lendora","tool":"execute_evm_contract_method","args":{"call":{"contract":"0x…","method":"mint(uint256)","args":["1000000"]}}}`,
+			`message.metadata: {"svp.delegation/v1":{"tokens":["<base64 token>", "…"]}} · ` +
+				`text: {"skill":"svpchain-execution-lendora","tool":"execute_evm_contract_method","args":{"call":{"contract":"0x<comptroller>","method":"enterMarkets(address[])","args":[["0x<cToken>"]]}}}`,
 		},
 	},
 }

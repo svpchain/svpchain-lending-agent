@@ -1,0 +1,32 @@
+# Local Lendora contract binding for scripts/local-lending-agent.sh.
+#
+# Copy this file to ../lendora.toml (the repository root) and replace the
+# placeholder with the Comptroller deployed on the local EVM chain. The local
+# protocol fixture starts a chain but does not deploy Lendora for you.
+#
+# This is appended verbatim to the generated agent.toml, mirroring the EVM
+# agent's root contracts.toml workflow. cToken market addresses are discovered
+# through the Comptroller at runtime. methods is the delegated-execution
+# whitelist: remove any method the local agent must not submit.
+
+[evm.lendora]
+comptroller_addr = "0x000000000000000000000000000000000000c0de"
+methods = [
+  "mint(uint256)",
+  "redeem(uint256)",
+  "redeemUnderlying(uint256)",
+  "borrow(uint256)",
+  "repayBorrow(uint256)",
+  "enterMarkets(address[])",
+  "exitMarket(address)",
+]
+
+# Optional dynamic Cosmos fee pricing for delegated execution. The agent
+# simulates first, then broadcasts with gas_used * gas_adjustment. gas_price
+# is in the fee denom's smallest unit per Cosmos gas.
+#[fee]
+#denom = "asvp"
+#dynamic = true
+#gas_price = "25000000000"
+#gas_adjustment = 1.25
+#max_gas_limit = 2000000

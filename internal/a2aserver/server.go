@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/a2aproject/a2a-go/v2/a2a"
@@ -24,6 +25,16 @@ import (
 // callers onto tool tenants. It runs the app's background caches alongside
 // the HTTP server and stops both when ctx is cancelled or either fails.
 func StartFullFor(ctx context.Context, cfg *config.Config, app *wire.App, ident CardIdentity) error {
+	// The Card is the public contract for delegated EVM execution. Warm the
+	// Lendora cache before it is built so it names the cToken addresses callers
+	// may pass to execute_evm_contract_method, rather than only the Comptroller.
+	if app.Lendora != nil {
+		if err := app.Lendora.Refresh(ctx); err != nil {
+			return fmt.Errorf("initial lendora market cache refresh: %w", err)
+		}
+		ident = withLendoraRuntimeCard(ident, cfg, app)
+	}
+
 	// The legacy {"skill":"svpchain-market-data","query":…} path answers from
 	// this service before the registry is consulted, so a binary that does not
 	// register the market-data family must not construct it — otherwise it
@@ -81,6 +92,43 @@ func StartFullFor(ctx context.Context, cfg *config.Config, app *wire.App, ident 
 		cancel()
 		return err
 	}
+}
+
+func withLendoraRuntimeCard(ident CardIdentity, cfg *config.Config, app *wire.App) CardIdentity {
+	var base string
+	for _, meta := range skillMetas {
+		if meta.id == toolbridge.SkillExecutionLendora {
+			base = meta.desc
+			break
+		}
+	}
+	if override := ident.SkillDescOverrides[toolbridge.SkillExecutionLendora]; override != "" {
+		base = override
+	}
+
+	contracts := make([]string, 0)
+	for _, market := range app.Lendora.All() {
+		contracts = append(contracts, strings.ToLower(market.CToken.Hex()))
+	}
+	contractList := "none"
+	if len(contracts) > 0 {
+		contractList = strings.Join(contracts, ", ")
+	}
+	methodList := "none"
+	if len(cfg.EVM.Lendora.Methods) > 0 {
+		methodList = strings.Join(cfg.EVM.Lendora.Methods, ", ")
+	}
+
+	overrides := make(map[string]string, len(ident.SkillDescOverrides)+1)
+	for skill, desc := range ident.SkillDescOverrides {
+		overrides[skill] = desc
+	}
+	overrides[toolbridge.SkillExecutionLendora] = base +
+		" Runtime Lendora deployment: Comptroller " + cfg.EVM.Lendora.ComptrollerAddr +
+		" (the only target for configured Comptroller methods); discovered cToken contracts: " + contractList +
+		"; enabled ABI method signatures: " + methodList + "."
+	ident.SkillDescOverrides = overrides
+	return ident
 }
 
 func serve(ctx context.Context, listenAddr, publicURL, indexerURL string, executor *Executor, card *a2a.AgentCard) error {
