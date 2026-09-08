@@ -1,197 +1,129 @@
-# svpchain-lending-agent
+# SVP-Chain Lending Agent
 
-The Lendora lending [A2A](https://a2aproject.github.io/A2A/) agent for SVP-Chain: a
-remote, server-side agent other agents call over the network.
+`svpchain-lending-agent` is the public A2A relay for Lendora. It does not
+contain Lendora contracts, asset configuration, or a built-in MCP server.
+Those belong to the private `svpchain-defi-mcp` service.
 
-It serves Lendora market and account reads, risk assessment, and unsigned
-supply/withdraw/borrow/repay/collateral tx building with an EVM landing rail,
-alongside self-service auth, faucet, the chain's `x/agent` /
-`x/agentwallet` modules, and the SVP-DT execution core — identity,
-self-registration, and settlement.
+At startup the agent authenticates to DeFi MCP, calls `tools/list`, and
+publishes only the `lendora_*` tools authorized for its relay token. Its own
+public tools are limited to:
 
-Everything above is implemented under `internal/`, which was the shared
-`svpchain-agent-core` library until that repo was retired and folded in here.
-`cmd/svpchain-lending-agent` composes it — `wire.LendingProfile` selects the
-operation families, and `card.go` declares this agent's public identity.
+- `broadcast_evm_tx`
+- `evm_tx_status`
+- `svpchain-meta/list_tools`
 
-`internal/mcp` is a second such absorption: `svpchain-mcp`'s `lib/mcp` at tag
-`v0.1.0`, the MCP tool handlers the A2A bridge dispatches into, plus the chain
-clients, tx builders and Lendora/EVM contract bindings under them. Unlike
-agent-core that repo is still live — the research agent keeps importing it — so
-this copy is a fork, kept diffable against the tag. `internal/mcp/doc.go` has
-the details and the re-sync recipe.
+`lendora_build_*` calls return unsigned EVM payloads. The caller signs those
+locally and sends the signed raw transaction through `broadcast_evm_tx`.
 
-| | |
-|---|---|
-| Port | 8082 |
-| Advertised at | `<public-url>/lending` |
-| Image | `ghcr.io/svpchain/svpchain-lending-agent` |
+## Configuration
 
-## Running
+The agent needs only an EVM JSON-RPC endpoint and private DeFi MCP access:
 
-```sh
-go run ./cmd/svpchain-lending-agent -config cmd/svpchain-lending-agent/agent.toml
+```toml
+listen_addr = ":8084"
+public_url = "https://lending-agent.example.com"
+
+[dex_chain]
+id = "svp-2517-1"
+evm_rpc_url = "http://127.0.0.1:8545"
+
+[defi_mcp]
+url = "http://127.0.0.1:8766/"
+auth_token = "lending-agent-private-secret"
+timeout = "90s"
+
+[llm]
+provider = "openai"
+base_url = "https://api.deepseek.com"
+model = "deepseek-v4-flash"
+api_key_env = "SVPCHAIN_LENDING_AGENT_LLM_API_KEY"
 ```
 
-`/healthz` answers load-balancer liveness checks; the Agent Card is at
+The LLM is optional. With its API key present, plain text and
+`{"intent":"..."}` requests may use read-only `lendora_get_*` and
+`lendora_assess_risk` tools. Structured `lendora_build_*` requests always
+pass directly to DeFi MCP and never invoke the LLM.
+
+DeFi MCP owns the allowed tool list, assets, cToken/Comptroller addresses,
+and token authorization. Add a dedicated `[[trusted_agent]]` entry there for
+this relay. Do not reuse another public agent's token.
+
+## Local Run
+
+Start `svpchain-defi-mcp` first, then set the optional LLM environment
+variable and run:
+
+```sh
+SVPCHAIN_LENDING_AGENT_LLM_API_KEY="..." \
+go run ./cmd/svpchain-lending-agent -config cmd/svpchain-lending-agent/agent.toml.example
+```
+
+The health endpoint is `/healthz`; the Agent Card is
 `/.well-known/agent-card.json`.
 
-### Local agent fixture
+## Deploy
+
+Create the deploy config once:
 
 ```sh
-cp scripts/lendora.toml.example lendora.toml
-$EDITOR lendora.toml
-./scripts/local-lending-agent.sh start
+./scripts/deploy.sh --config-dir ~/.config/svpchain-lending-agent-dev03 --init-config
 ```
 
-The launcher starts the protocol local agent chain when needed, funds the local
-operator, and manages `start`, `stop`, `status`, `logs`, `register`, and
-`update`. The local chain fixture does not deploy Lendora, so a deployed local
-Comptroller address is required in `lendora.toml`. Individual cToken market
-addresses are discovered from the Comptroller and supplied per Lendora
-operation. `evm.lendora.methods` is the delegated-execution whitelist: remove
-a signature to disable its delegated operation. Pass `--lendora-file <path>` or set
-`LENDING_AGENT_LOCAL_LENDORA_FILE` to use a config outside the repository.
-The Agent Card exposes `svpchain-execution-lendora` / `execute_evm_contract_method`.
-Its `args.call` contains `contract`, ABI `method`, and ABI-shaped `args`: cToken
-writes take `["1000000"]`, `enterMarkets(address[])` takes
-`[["0xcToken..."]]`, and `exitMarket(address)` takes `["0xcToken..."]`.
-`evm.lendora.methods` remains the authorization whitelist. Comptroller methods
-can target only the configured Comptroller and reference only markets discovered
-from it. At startup the Card names that Comptroller, its discovered cToken
-contracts, and the enabled method signatures.
-
-## Deploying
+Set the values shown in `scripts/config.sh.example`, especially
+`SVPCHAIN_EVM_RPC`, `SVPCHAIN_DEFI_MCP_URL`, and
+`SVPCHAIN_LENDING_DEFI_MCP_AUTH_TOKEN`. Inspect the rendered config without
+deploying:
 
 ```sh
-./scripts/deploy.sh --host www@host.example.com \
-  --public-url https://agents.svpchain.org
+./scripts/deploy.sh --config-dir ~/.config/svpchain-lending-agent-dev03 --print-config
+./scripts/deploy.sh --config-dir ~/.config/svpchain-lending-agent-dev03 --print-nginx
 ```
 
-### Settings in a file instead of flags
-
-Rather than retyping the flags, put them in a sourced shell file:
+Deploy with:
 
 ```sh
-./scripts/deploy.sh --init-config     # writes the file at 0600 and names it
+./scripts/deploy.sh --config-dir ~/.config/svpchain-lending-agent-dev03
 ```
 
-Edit what it names, then a routine install is just `./scripts/deploy.sh`.
+The script prints, but never installs, the Nginx location block. Add it to the
+server for the configured Lending Agent host so its root path reaches
+`127.0.0.1:8084`.
+Any Agent Card change requires the normal on-chain agent update so its
+capability hash matches the live card.
 
-To see what actually resolved, and from which layer:
+## On-Chain Registration
+
+Lending has an independent on-chain identity. Its DID is allocated by the chain
+as `did:svp:<owner>:<index>`. Its owner key is stored only in
+the local dedicated keyring from `SVPCHAIN_LENDING_AGENT_KEYRING_HOME`; it is
+not sent to the deployment host and must not be shared with EVM Agent.
+
+After the service and public Agent Card are live, create the identity once:
 
 ```sh
-./scripts/deploy.sh --print-env       # the key prints as "set (64 chars)", never its value
+./scripts/deploy.sh --config-dir ~/.config/svpchain-lending-agent-dev03 --gen-owner-key
 ```
 
-The directory is named after **this agent**, not after the project, so every
-agent in the fleet carries its own. That is not filing tidiness: an agent's
-on-chain id derives from its operator key, so two agents sharing one key would
-be a single id claiming two cards. A directory per agent makes that hard to do
-by accident, where one shared file would invite it.
-
-Precedence is flag > environment > config file > default, so
-`./scripts/deploy.sh --public-url https://staging.example.org` still overrides,
-and `--no-config` ignores the file. `--config-dir` (or `SVPCHAIN_CONFIG_DIR`)
-points elsewhere. Because the file is sourced rather than parsed it can compute
-values — and by the same token it is code, so the script refuses one that is
-group- or world-writable.
-
-The caps and `--markets-refresh` had no environment variable before this file
-existed; they are settable now as `SVPCHAIN_DEPOSIT_MAX_USDC` and friends.
-
-Inspect without touching anything: `--print-env`, `--print-config`,
-`--print-compose`, `--print-nginx`, `--dry-run`. Tear down with `--uninstall`.
-
-`--help` lists every flag. The only EVM options are `--evm-rpc` and
-`--evm-lendora-comptroller`, both of which this agent requires to boot
-(`cfg.RequireLendora`); set the delegated method whitelist with
-`SVPCHAIN_EVM_LENDORA_METHODS` in the deploy config file. There are no swap, oracle or bridge options:
-`wire.LendingProfile` builds none of those surfaces.
-
-## Behind the reverse proxy
-
-The agents share one host, each on its own path: this one answers at
-`<base>/lending` and listens on `127.0.0.1:8084`. Print its location block:
+Fund the printed `svp1...` address with the x/agent minimum bond, registration
+fee, and gas. Then preview and submit the registration:
 
 ```sh
-./scripts/deploy.sh --public-url https://agents.svpchain.org --print-nginx
+./scripts/deploy.sh --config-dir ~/.config/svpchain-lending-agent-dev03 --register --dry-run
+./scripts/deploy.sh --config-dir ~/.config/svpchain-lending-agent-dev03 --register
 ```
 
-Nothing installs it. The server block it belongs in owns TLS and the base
-host, both shared with agents this repo must not know about — so paste it,
-then `nginx -t && systemctl reload nginx`.
+The same `--register` command is idempotent: it updates an existing Lending
+Agent record. It discovers the single Agent owned by the dedicated key; if the
+owner controls multiple Agents, set `SVPCHAIN_LENDING_AGENT_ID` to Lending's
+indexed DID. It lets `svpchaind` fetch the live public Agent Card and compute
+the capability hash, so run it again whenever that card changes. `svpchaind`
+must support `query agent next-agent-index`; an older binary constructs the
+legacy unindexed DID and will be rejected by the current chain.
 
-The route is not cosmetic. `public_url` is advertised inside the Agent Card,
-and a verifier fetches that URL to recompute the capability hash; if nginx
-does not route `/lending` to this port the agent advertises a URL that 404s and
-reads as unverified, with every process healthy and nothing in the logs.
-`TestDeployScriptNginxRouteMatchesConfig` pins the two together.
-
-## The operator key
-
-Optional. Without one the agent runs keyless and the execution skills refuse
-with a reason. With one, `agent_self_register` puts this agent on chain and it
-can execute delegated orders and be paid through the settlement escrow.
-
-It is a 32-byte hex eth_secp256k1 key. A local run reads it from
-`[operator] key_file` or from `SVPCHAIN_LENDING_AGENT_OPERATOR_KEY`, which
-takes precedence. The variable is named for *this* agent rather than the fleet,
-for the same reason the config directory is: one shared name across agents is
-one id claiming several cards.
-
-For a deploy the key goes in `config.sh` as
-`SVPCHAIN_LENDING_AGENT_OPERATOR_KEY`, holding the hex itself rather than a
-path. There is no flag for it — a key in `argv` shows up in `ps` and in your
-shell history. Because the file is sourced it can compute the value, so the key
-need not sit in plaintext on the machine you deploy from:
+## Verification
 
 ```sh
-SVPCHAIN_LENDING_AGENT_OPERATOR_KEY="$(op read op://vault/lending/key)"
+go test ./cmd/svpchain-lending-agent ./internal/a2aserver ./internal/toolbridge \
+  ./internal/config ./internal/defimcp ./internal/wire ./internal/agenttools \
+  ./internal/agentrunner ./internal/llm
 ```
-
-On the remote it lands as a **docker compose secret** mounted read-only at
-`/run/secrets/operator_key`, which is what `key_file` then points at. Not a
-container environment variable — `docker inspect` and `/proc/<pid>/environ`
-would both expose that.
-
-**It must be distinct from every other agent's key.** An agent's on-chain id
-derives from its key and `agent_self_register` publishes a hash of *this*
-binary's card, so two agents sharing a key collide on one registry record and
-overwrite each other's capability hash. Fund the key's address before
-registering: the bond, plus gas for delegated execution.
-
-## The agent card is an interface
-
-The served card's bytes are hashed into this agent's on-chain registration, and
-verifiers recompute that hash from a live fetch. `card.go` is therefore
-load-bearing: change it and every deployment must run `agent_self_update`.
-`cmd/svpchain-lending-agent/testdata/card.json` is a golden that makes such a
-change deliberate rather than accidental — including when the skill text under
-`internal/a2aserver` changes, which moves the card just as surely.
-
-## Development
-
-`GOWORK=off` is set in every Makefile target. A `go.work` in the parent
-directory would resolve dependencies from sibling checkouts rather than the
-versions `go.mod` pins — convenient for cross-repo work, but it can ship a build
-against a revision no tag points at.
-
-The build needs the chain's protocol module at `../svpagent/protocol` (a go.mod
-`replace`), which is also why the Docker build vendors first. Because Go does
-not apply a dependency's own `replace` directives, this `go.mod` must restate
-every one of protocol's verbatim; `deps_test.go` diffs the two on every
-`go test ./...`, so drift fails loudly instead of resolving upstream cosmos and
-erroring somewhere unrelated.
-
-`internal/` is the former `svpchain-agent-core` and `internal/mcp` the former
-`svpchain-mcp/lib/mcp`, both folded in and pruned to this binary's surface. The
-swap, bridge and ERC-20/721 DeFi surface went with them — only the landing rail
-remains — while the perps families stay in `internal/toolbridge` and
-`internal/mcp/tools` deliberately unregistered, because the shared dispatch and
-delegated-read tests exercise the credential machinery through them and the
-delegated read layer covers only account tools.
-
-The research agent still imports `svpchain-mcp`, and that repo is not going
-away — it still ships `cmd/mcp-server`. Fixes landing there do not reach
-`internal/mcp` on their own.

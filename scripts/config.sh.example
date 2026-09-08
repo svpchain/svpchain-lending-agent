@@ -1,95 +1,45 @@
-# scripts/deploy.sh settings, so a routine install is `./scripts/deploy.sh`
-# with no flags.
-#
-# This file is SOURCED, not parsed — it can compute its values, and it runs as
-# you. deploy.sh refuses to read it if it is group- or world-writable.
-#
-#   ./scripts/deploy.sh --init-config    # writes this file at 0600 and names it
-#
-# The directory is named after this agent rather than after the project, so
-# every agent in the fleet carries its own. That is what keeps their operator
-# keys apart: an agent's on-chain id derives from its key, so two agents
-# sharing one would be a single id claiming two cards.
-#
-# Precedence: flag > environment > config file > default. So
-# `./scripts/deploy.sh --public-url https://staging.example.org` still works,
-# and so does a one-off `SVPCHAIN_DEPLOY_HOST=other ./scripts/deploy.sh`.
+# Lending Agent deploy settings. This file is sourced by deploy.sh; keep it
+# mode 600 because it contains the private DeFi MCP relay credential and may
+# contain an LLM API key.
 
-# ---- the host and the chain ------------------------------------------------
-
-# SSH target. Needs docker and compose v2 usable without sudo.
+# SSH host with Docker and Compose v2 available without sudo.
 SVPCHAIN_DEPLOY_HOST="www@svpdev1.example.com"
 
-# The DEX chain, as reached from the deploy host itself — the container runs
-# with network_mode: host, so 127.0.0.1 here means the host's own loopback.
-SVPCHAIN_CHAIN_ID="svp-2517-1"
-SVPCHAIN_GRPC_ADDR="127.0.0.1:9090"
-SVPCHAIN_COMET_RPC="http://127.0.0.1:26657"
-SVPCHAIN_INDEXER="http://127.0.0.1:3002"
-
-# Optional separate chain carrying x/agent + x/agentwallet, over its Cosmos
-# REST API. Both or neither.
-#SVPCHAIN_AGENT_CHAIN_ID="svpagent-testnet-1"
-#SVPCHAIN_AGENT_CHAIN_REST="http://127.0.0.1:1317"
-
-# The base URL callers reach the agents at. Each agent appends its own segment;
-# this one advertises <base>/lending.
+# The public URL advertised by the Agent Card. Lending uses its own hostname.
 SVPCHAIN_AGENT_PUBLIC_URL="https://agents.svpchain.org"
 
-# ---- this agent's identity -------------------------------------------------
-
-# Optional. Unset, the agent runs keyless: it still advertises the execution
-# skills but refuses them at call time with a reason. Set, it signs delegated
-# executions and its own registration.
-#
-# This is the hex key ITSELF, not a path to it, and there is no flag for it: a
-# key in argv shows up in `ps` and in your shell history. Because this file is
-# sourced rather than parsed, the value can be computed — which is the point,
-# since it means the key need not sit in plaintext anywhere on this machine:
-#
-#   SVPCHAIN_LENDING_AGENT_OPERATOR_KEY="$(op read op://vault/lending/key)"
-#   SVPCHAIN_LENDING_AGENT_OPERATOR_KEY="$(pass show svpchain/lending)"
-#
-# Reading it from a file still works if you keep one:
-#
-#   SVPCHAIN_LENDING_AGENT_OPERATOR_KEY="$(cat "$HOME/.config/svpchain-lending-agent/operator.key")"
-#
-# The deploy ships it to the remote as a docker compose secret mounted at
-# /run/secrets/operator_key — never as a container environment variable, which
-# `docker inspect` would expose.
-#
-# Must be distinct from every other agent's — see above.
-#
-# Left COMMENTED OUT deliberately. This file is sourced, so an uncommented line
-# reading a key you have not created yet would fail the source itself, and
-# every command would then die on that instead of running keyless as intended.
-#SVPCHAIN_LENDING_AGENT_OPERATOR_KEY="$(cat "$HOME/.config/svpchain-lending-agent/operator.key")"
-
-SVPCHAIN_OPERATOR_CAPABILITIES="evm.contract_call"
-SVPCHAIN_OPERATOR_METADATA="svpchain lending agent"
-
-# ---- optional families and tuning ------------------------------------------
-
-# The chain's EVM JSON-RPC. Required for the Lendora family; empty makes it
-# refuse with a reason.
+# The EVM chain used only for broadcast_evm_tx and evm_tx_status.
+SVPCHAIN_CHAIN_ID="svp-2517-1"
 SVPCHAIN_EVM_RPC="http://127.0.0.1:8545"
-SVPCHAIN_EVM_LENDORA_COMPTROLLER="0x0fabb2b5057b14224b04e4cbb217dd6b275f75a7"
-# CSV whitelist for delegated Lendora execution. A method omitted here is
-# still available for caller-signed EVM builds, but execute_evm_contract_method
-# and the typed execute_lendora_* tools refuse it.
-SVPCHAIN_EVM_LENDORA_METHODS="mint(uint256),redeem(uint256),redeemUnderlying(uint256),borrow(uint256),repayBorrow(uint256)"
 
-# Empty makes the faucet skills refuse with a reason.
-SVPCHAIN_FAUCET_URL="https://pre-faucet.svpchain.org"
+# Private DeFi MCP. This credential must match the lending-agent trusted-agent
+# entry in svpchain-defi-mcp and must not be shared with another public agent.
+SVPCHAIN_DEFI_MCP_URL="http://127.0.0.1:8766/"
+SVPCHAIN_LENDING_DEFI_MCP_AUTH_TOKEN="replace-with-lending-agent-secret"
 
-# How often the markets cache refreshes; also the Lendora market cache.
-#SVPCHAIN_MARKETS_REFRESH="30s"
+# Optional natural-language read-only Lendora planning. Structured MCP calls
+# and EVM transaction broadcast work without this key.
+SVPCHAIN_LENDING_AGENT_LLM_PROVIDER="openai"
+SVPCHAIN_LENDING_AGENT_LLM_BASE_URL="https://api.deepseek.com"
+SVPCHAIN_LENDING_AGENT_LLM_MODEL="deepseek-v4-flash"
+SVPCHAIN_LENDING_AGENT_LLM_API_KEY=""
 
-# Caps on funds movements, in human USDC. Unset means no cap.
-#SVPCHAIN_DEPOSIT_MAX_USDC="10000"
-#SVPCHAIN_WITHDRAW_MAX_USDC="10000"
-#SVPCHAIN_TRANSFER_MAX_USDC="10000"
-#SVPCHAIN_DAILY_WITHDRAW_CAP_USDC="50000"
+# On-chain registration is local-only. This keyring must be dedicated to this
+# Lending Agent; do not reuse the EVM Agent owner or its keyring.
+SVPCHAIN_BIN="svpchaind"
+SVPCHAIN_LENDING_AGENT_OWNER_KEY_NAME="lending-agent-owner"
+SVPCHAIN_LENDING_AGENT_KEYRING_HOME="~/.config/svpchain-lending-agent/keyring"
+SVPCHAIN_LENDING_AGENT_KEYRING_BACKEND="file"
+# Leave empty for a new owner or when this owner controls only this agent.
+# Set the indexed DID (did:svp:svp1...:<index>) only if the owner has more
+# than one Agent registration and this script needs to select Lending's record.
+SVPCHAIN_LENDING_AGENT_ID=""
+SVPCHAIN_REGISTER_RPC="https://svp-devnet.svpchain.org/rpc/"
+SVPCHAIN_AGENT_CAPABILITIES="evm.lending,lendora"
+SVPCHAIN_AGENT_PRICING_AMOUNT="1000000"
+SVPCHAIN_AGENT_PRICING_UNIT="call"
+# Registration fee plus sufficient gas. The bond defaults to x/agent MinBond.
+SVPCHAIN_REGISTER_FEES="25000000000000000asvp"
 
-# Where the agent is installed on the remote host.
-#SVPCHAIN_INSTALL_DIR="~/svpchain-lending-agent"
+# Remote installation directory.
+SVPCHAIN_INSTALL_DIR="~/svpchain-lending-agent"

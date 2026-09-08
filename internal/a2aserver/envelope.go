@@ -4,26 +4,15 @@ import "encoding/json"
 
 // Request is the JSON envelope a caller sends as the task message text.
 //
-// The general form names a skill, a tool, and the tool's arguments — the
-// args object is exactly the MCP tool's input schema, so the A2A surface and
-// the MCP tool surface share one vocabulary. The legacy read-layer form
-// (skill + query + flat fields) is still honored so existing callers keep
-// working.
+// The request names a skill, a tool, and tool arguments. Args use exactly the
+// input schema synchronized from the private MCP. Intent is an optional
+// natural-language, read-only Lendora request.
 type Request struct {
-	Skill string          `json:"skill"`
-	Tool  string          `json:"tool,omitempty"`
-	Args  json.RawMessage `json:"args,omitempty"`
-
-	// Bearer authenticates the caller when it cannot set an Authorization
-	// header. The header wins when both are present.
-	Bearer string `json:"bearer,omitempty"`
-
-	// Legacy read-layer fields, honored when Skill is svpchain-market-data
-	// and Query is set.
-	Query  string `json:"query,omitempty"`
-	Ticker string `json:"ticker,omitempty"`
-	Side   string `json:"side,omitempty"`
-	Size   string `json:"size,omitempty"`
+	Skill  string          `json:"skill"`
+	Tool   string          `json:"tool,omitempty"`
+	Args   json.RawMessage `json:"args,omitempty"`
+	Caller string          `json:"caller,omitempty"`
+	Intent string          `json:"intent,omitempty"`
 }
 
 // Response is the agent's reply, serialized as the message text.

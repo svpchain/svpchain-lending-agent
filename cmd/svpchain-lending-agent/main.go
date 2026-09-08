@@ -1,14 +1,6 @@
-// Command svpchain-lending-agent is the lending A2A agent for the Lendora
-// money market on SVP-Chain: market and account reads, risk assessment,
-// unsigned supply/withdraw/borrow/repay/collateral tx building with an EVM
-// landing rail, self-service auth, faucet, the chain's agent/agentwallet
-// modules, the SVP-DT execution core (identity, self-registration, settlement),
-// and delegated Lendora execution — supply, redeem, withdraw, borrow and repay
-// under an SVP-DT credential — when an operator key is configured.
-//
-// Everything it serves is implemented under internal/, which was the shared
-// svpchain-agent-core library until that repo was retired. The perps and EVM
-// DeFi families live in their own binaries.
+// Command svpchain-lending-agent is the public Lendora A2A relay. It
+// synchronizes a token-scoped private DeFi MCP catalog at startup, serves its
+// Lendora tools, and provides the caller-signed EVM broadcast landing rail.
 package main
 
 import (
@@ -17,10 +9,16 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
+	"time"
 
 	"github.com/svpchain/svpchain-lending-agent/internal/a2aserver"
+	"github.com/svpchain/svpchain-lending-agent/internal/agentrunner"
 	"github.com/svpchain/svpchain-lending-agent/internal/config"
+	"github.com/svpchain/svpchain-lending-agent/internal/defimcp"
+	"github.com/svpchain/svpchain-lending-agent/internal/llm"
+	"github.com/svpchain/svpchain-lending-agent/internal/toolbridge"
 	"github.com/svpchain/svpchain-lending-agent/internal/wire"
 )
 
@@ -47,15 +45,48 @@ func run(ctx context.Context, configPath string) error {
 	if err != nil {
 		return err
 	}
-	// This binary exists to serve the Lendora family — a missing EVM endpoint
-	// or comptroller is a boot failure here, not a call-time refusal.
-	if err := cfg.RequireLendora(); err != nil {
+	if err := cfg.RequireDeFiMCP(); err != nil {
 		return err
 	}
-	app, err := wire.BuildProfile(ctx, cfg, wire.LendingProfile)
+	app, err := wire.BuildProxy(ctx, cfg)
 	if err != nil {
 		return err
 	}
 	defer app.Close()
-	return a2aserver.StartFullFor(ctx, cfg, app, identity)
+	mcpClient, err := defimcp.Connect(ctx, cfg.DeFiMCP.URL, cfg.DeFiMCP.AuthToken, time.Duration(cfg.DeFiMCP.Timeout))
+	if err != nil {
+		return err
+	}
+	defer mcpClient.Close()
+	registered := 0
+	for _, tool := range mcpClient.Tools() {
+		if !isLendoraTool(tool.Name) {
+			continue
+		}
+		name := tool.Name
+		if err := app.Registry.AddProxy(toolbridge.SkillLendora, name, tool.InputSchema, func(callCtx context.Context, args map[string]any) (string, error) {
+			return mcpClient.Call(callCtx, name, args)
+		}); err != nil {
+			return err
+		}
+		registered++
+	}
+	if registered == 0 {
+		return fmt.Errorf("private defi mcp catalog contains no lendora_* tools for this lending-agent token")
+	}
+	app.Registry.RegisterMeta()
+	var runner a2aserver.IntentRunner
+	if keyEnv := strings.TrimSpace(cfg.LLM.APIKeyEnv); keyEnv != "" && strings.TrimSpace(os.Getenv(keyEnv)) != "" {
+		runner = agentrunner.New(llm.Config{
+			Provider: cfg.LLM.Provider,
+			BaseURL:  cfg.LLM.BaseURL,
+			Model:    cfg.LLM.Model,
+			APIKey:   os.Getenv(keyEnv),
+		}, mcpClient)
+	}
+	return a2aserver.StartFullFor(ctx, cfg, app, identity, runner)
+}
+
+func isLendoraTool(name string) bool {
+	return strings.HasPrefix(strings.TrimSpace(name), "lendora_")
 }

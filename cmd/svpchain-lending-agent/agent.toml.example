@@ -1,58 +1,22 @@
-# svpchain-lending-agent configuration.
-#
-# The schema is internal/config. Unknown keys are ignored rather than rejected,
-# so a config still carrying keys for surfaces this agent does not serve loads
-# fine. dex_chain.evm_rpc_url and evm.lendora.comptroller_addr are REQUIRED here
-# (the binary refuses to boot without them). Use a DISTINCT operator key per
-# binary: the agent id derives from the key and self-registration hashes this
-# binary's own card.
+# Public Lending Agent configuration.
+# Lendora contract addresses, assets, and allowed MCP tools are configured in
+# the private svpchain-defi-mcp service, not here.
 
 listen_addr = ":8084"
-# How callers reach this agent; advertised in the Agent Card.
-public_url  = "http://localhost:8084"
+public_url = "http://localhost:8084"
 
 [dex_chain]
-id               = "svpchain-testnet-1"
-grpc_addr        = "127.0.0.1:9090"
-comet_rpc_url    = "http://127.0.0.1:26657"
-indexer_base_url = "http://127.0.0.1:3002"
-# Required for this binary: Lendora builds land as EVM txs.
-evm_rpc_url      = "http://127.0.0.1:8545"
+id = "svpchain-testnet-1"
+evm_rpc_url = "http://127.0.0.1:8545"
 
-# Required for this binary: the Lendora (Compound V2 fork) Comptroller.
-# methods is the delegated-execution whitelist. Remove a signature to make its
-# execute_evm_contract_method and typed execute_lendora_* operations refuse
-# before they broadcast.
-[evm.lendora]
-comptroller_addr = "0x…"
-methods = [
-  "mint(uint256)",
-  "redeem(uint256)",
-  "redeemUnderlying(uint256)",
-  "borrow(uint256)",
-  "repayBorrow(uint256)",
-  "enterMarkets(address[])",
-  "exitMarket(address)",
-]
+[defi_mcp]
+url = "http://127.0.0.1:8766/"
+auth_token = "replace-with-lending-agent-private-secret"
+timeout = "90s"
 
-# Recommended dynamic Cosmos fee pricing for delegated execution and registration.
-# The agent simulates at max_gas_limit, then signs with gas_used times the
-# adjustment. gas_price is in asvp's smallest unit per Cosmos gas.
-[fee]
-denom = "asvp"
-dynamic = true
-gas_price = "25000000000"
-gas_adjustment = 1.25
-max_gas_limit = 2000000
-
-# Optional testnet faucet backend; unset, the faucet tools refuse.
-#faucet_base_url = "http://127.0.0.1:8088"
-
-# Operator key for delegated Lendora execution (supply/redeem/withdraw/
-# borrow/repay under SVP-DT credentials), on-chain self-registration, and
-# SVP-DT settlement. Optional: without it the execution skills refuse with a
-# reason. The SVPCHAIN_LENDING_AGENT_OPERATOR_KEY env var takes precedence over key_file.
-#[operator]
-#key_file     = "operator.key"
-#capabilities = ["evm.contract_call"]
-#metadata     = "svpchain Lendora lending agent"
+[llm]
+# Optional. The API key stays in this environment variable, not this file.
+provider = "openai"
+base_url = "https://api.deepseek.com"
+model = "deepseek-v4-flash"
+api_key_env = "SVPCHAIN_LENDING_AGENT_LLM_API_KEY"

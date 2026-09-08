@@ -1,15 +1,6 @@
 #!/usr/bin/make -f
 
-VERSION := $(shell git describe --tags --always 2>/dev/null || echo dev)
-COMMIT  := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 AGENT   := svpchain-lending-agent
-
-ldflags = -X github.com/cosmos/cosmos-sdk/version.Name=svpchain \
-	-X github.com/cosmos/cosmos-sdk/version.AppName=$(AGENT) \
-	-X github.com/cosmos/cosmos-sdk/version.Version=$(VERSION) \
-	-X github.com/cosmos/cosmos-sdk/version.Commit=$(COMMIT)
-
-BUILD_FLAGS := -ldflags '$(ldflags)'
 
 # GOWORK=off everywhere: a go.work in the parent directory would resolve this
 # module's dependencies from sibling checkouts instead of the versions go.mod
@@ -19,7 +10,8 @@ GO := GOWORK=off go
 .PHONY: build test vet fmt vendor docker deploy clean
 
 build:
-	$(GO) build -mod=readonly $(BUILD_FLAGS) -o build/$(AGENT) ./cmd/$(AGENT)
+	mkdir -p build
+	$(GO) build -mod=readonly -o build/$(AGENT) ./cmd/$(AGENT)
 
 test:
 	$(GO) test ./...
@@ -30,8 +22,7 @@ vet:
 fmt:
 	gofmt -l -w .
 
-# Materialize dependencies so the Docker build is self-contained: the go.mod
-# replace to ../svpagent/protocol is not inside the build context.
+# Materialize dependencies so the Docker build is self-contained.
 vendor:
 	$(GO) mod vendor
 
