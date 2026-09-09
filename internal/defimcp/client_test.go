@@ -29,7 +29,7 @@ func TestSessionFailureRecognizesStreamableHTTPFailures(t *testing.T) {
 }
 
 func TestRetrySafeToolDoesNotRetrySideEffects(t *testing.T) {
-	for _, name := range []string{"list_evm_assets", "get_balance", "quote_swap", "build_erc20_transfer", "lendora_build_supply_tx"} {
+	for _, name := range []string{"list_evm_assets", "get_balance", "quote_swap", "build_erc20_transfer", "lendora_get_balances", "lendora_list_markets", "lendora_quote_withdraw", "lendora_build_supply_tx"} {
 		if !retrySafeTool(name) {
 			t.Errorf("retrySafeTool(%q) = false", name)
 		}
@@ -72,5 +72,19 @@ func TestTrustedTransportAddsPrivateHeaders(t *testing.T) {
 	}
 	if got := req.Header.Get(agentTokenHeader); got != "" {
 		t.Fatalf("original request was mutated: %q", got)
+	}
+}
+
+func TestStreamableHTTPClientAllowsPersistentHangingGET(t *testing.T) {
+	client := newStreamableHTTPClient("private-token")
+	if client.Timeout != 0 {
+		t.Fatalf("streamable HTTP client timeout = %s, want 0 for persistent hanging GET", client.Timeout)
+	}
+	transport, ok := client.Transport.(trustedTransport)
+	if !ok {
+		t.Fatalf("transport = %T, want trustedTransport", client.Transport)
+	}
+	if transport.token != "private-token" {
+		t.Fatalf("transport token = %q", transport.token)
 	}
 }
